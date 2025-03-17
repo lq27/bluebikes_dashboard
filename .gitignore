@@ -1,3 +1,8 @@
+# Do not upload service account key to git
+*.json
+
+# Below is the generic Python gitignore template 
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

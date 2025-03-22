@@ -1,0 +1,52 @@
+id: bluebikes_ingest
+namespace: bluebikes
+
+variables:
+  base_url: "https://s3.amazonaws.com/hubway-data"
+  url_suffix: "-hubway-tripdata"
+  zip_suffix: ".zip"
+  csv_suffix: ".csv"
+  filename: '{{ inputs.year }}{{ inputs.month }}{{ vars.url_suffix }}'
+
+inputs:
+  - id: year
+    type: STRING
+    defaults: '2015'
+  - id: month
+    type: SELECT
+    values: ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+    defaults: '01'
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{kv('GCP_CREDS')}}"
+      projectId: "{{kv('GCP_PROJECT_ID')}}"
+      location: "{{kv('GCP_LOCATION')}}"
+      bucket: "{{kv('GCP_BUCKET_NAME')}}"
+
+tasks:
+  - id: set_label
+    type: io.kestra.plugin.core.execution.Labels
+    labels:
+      month: render(inputs.month)
+      year: render(inputs.year)
+
+  - id: get_zipfile
+    type: io.kestra.plugin.core.http.Download
+    uri: "{{ vars.base_url }}/{{ render(vars.filename) }}{{vars.zip_suffix}}"
+
+  - id: extract_zip
+    type: io.kestra.plugin.compress.ArchiveDecompress
+    algorithm: ZIP
+    from: "{{ outputs.get_zipfile.uri }}"
+
+  - id: upload_to_gcs
+    type: io.kestra.plugin.gcp.gcs.Upload
+    from: "{{ outputs.extract_zip.files[render(vars.filename) ~ vars.csv_suffix ] }}"
+    to: "gs://{{kv('GCP_BUCKET_NAME')}}/{{ inputs.year }}/{{ inputs.month }}/{{render(vars.filename)}}{{vars.csv_suffix}}"
+
+  - id: purge_files
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: To avoid cluttering your storage, we will remove the downloaded files
+

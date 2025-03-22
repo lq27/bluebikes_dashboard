@@ -1,5 +1,13 @@
+# mounted volumes
+kestra-storage/
+kestra-data/
+postgres-data/
+kestra-secrets/
+
 # Do not upload service account key to git
 *.json
+*.env_encoded
+bluebikes_kv.yaml
 
 # Below is the generic Python gitignore template 
 

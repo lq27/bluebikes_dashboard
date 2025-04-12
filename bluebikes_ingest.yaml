@@ -3,10 +3,28 @@ namespace: bluebikes
 
 variables:
   base_url: "https://s3.amazonaws.com/hubway-data"
-  url_suffix: "-hubway-tripdata"
+  url_suffix: "-{% if inputs.year|number < 2018 or (inputs.year|number == 2018 and inputs.month|number <= 4) %}hubway{% else %}bluebikes{% endif %}-tripdata"
   zip_suffix: ".zip"
   csv_suffix: ".csv"
   filename: '{{ inputs.year }}{{ inputs.month }}{{ vars.url_suffix }}'
+  expected_headers:
+    - "ride_id"
+    - "rideable_type"
+    - "started_at"
+    - "ended_at"
+    - "start_station_name"
+    - "start_station_id"
+    - "end_station_name"
+    - "end_station_id"
+    - "start_lat"
+    - "start_lng"
+    - "end_lat"
+    - "end_lng"
+    - "member_casual"
+    - 'tripduration'
+    - 'birth year'
+    - 'gender'
+    - 'bikeid'
 
 inputs:
   - id: year
@@ -16,6 +34,7 @@ inputs:
     type: SELECT
     values: ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
     defaults: '01'
+
 
 pluginDefaults:
   - type: io.kestra.plugin.gcp
@@ -41,12 +60,124 @@ tasks:
     algorithm: ZIP
     from: "{{ outputs.get_zipfile.uri }}"
 
+  - id: validate_and_transform_schema
+    type: io.kestra.plugin.scripts.python.Script
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+    containerImage: ghcr.io/kestra-io/pydata:latest
+    script: |
+      import pandas as pd
+      import re
+      import os
+      import sys
+      
+      # Get the expected headers from the input
+      expected_headers = {{ vars.expected_headers }}
+      input_file = "{{ outputs.extract_zip.files[render(vars.filename) ~ vars.csv_suffix ] }}"
+      transformed_output_file = 'transformed_output_file.csv'
+      
+      try:
+          # Read the CSV file
+          df = pd.read_csv(input_file, low_memory=False)
+          
+          # Store original columns for reporting
+          original_columns = set(df.columns)
+          
+          # Create mapping dictionary for column renaming
+          column_mapping = {}
+          
+          # Possible variations of column names
+          variations = {
+              'ride_id': ['ride_id', 'rideid', 'ride id', 'trip_id', 'tripid', 'trip id'],
+              'rideable_type': ['rideable_type', 'rideable type', 'bike_type', 'bike type', 'biketype'],
+              'started_at': ['started_at', 'started at', 'start_time', 'start time', 'starttime', 'starttime'],
+              'ended_at': ['ended_at', 'ended at', 'end_time', 'end time', 'stoptime', 'endtime'],
+              'start_station_name': ['start_station_name', 'start station name', 'from_station_name', 'from station name'],
+              'start_station_id': ['start_station_id', 'start station id', 'from_station_id', 'from station id'],
+              'end_station_name': ['end_station_name', 'end station name', 'to_station_name', 'to station name'],
+              'end_station_id': ['end_station_id', 'end station id', 'to_station_id', 'to station id'],
+              'start_lat': ['start_lat', 'start lat', 'start_latitude', 'start latitude', 'start station latitude'],
+              'start_lng': ['start_lng', 'start lng', 'start_longitude', 'start longitude', 'start station longitude'],
+              'end_lat': ['end_lat', 'end lat', 'end_latitude', 'end latitude', 'end station latitude'],
+              'end_lng': ['end_lng', 'end lng', 'end_longitude', 'end longitude', 'end station longitude'],
+              'member_casual': ['member_casual', 'member casual', 'usertype', 'user_type', 'user type', 'customer_type']
+          }
+          
+          # Find the best match for each column
+          matched_columns = set()
+          for expected_col in expected_headers:
+              # Check if the column exists as is
+              if expected_col in df.columns:
+                  matched_columns.add(expected_col)
+                  continue
+                  
+              # Try to find variations
+              found_match = False
+              if expected_col in variations:
+                  for variation in variations[expected_col]:
+                      if variation in df.columns:
+                          column_mapping[variation] = expected_col
+                          matched_columns.add(variation)
+                          found_match = True
+                          break
+          
+          # Log the mapping for debugging
+          print(f"Column mapping: {column_mapping}")
+          
+          # Apply the column mapping
+          df = df.rename(columns=column_mapping)
+
+          default_values = {
+            'rideable_type': 'classic_bike',
+             # Add more custom defaults here if needed
+          }
+          
+          # Check for missing columns after renaming
+          current_columns = set(df.columns)
+          missing_columns = set(expected_headers) - current_columns
+          
+          # Fill missing columns with defaults or "None" if not specified
+          for col in missing_columns:
+            default_value = default_values.get(col, "None")
+            df[col] = default_value
+            print(f"Added missing column: {col} with default value: {default_value}")
+          
+          # Check for any unexpected columns that remain
+          final_columns = set(df.columns)
+          unexpected_columns = final_columns - set(expected_headers)
+          
+          if unexpected_columns:
+            print("Schema validation failed!")
+            print(f"Unexpected columns: {unexpected_columns}")
+            sys.exit(1)
+          
+          # Reorder columns to match expected_headers
+          df_reordered = df[expected_headers]
+          
+          # Save the transformed file
+          df_reordered.to_csv(transformed_output_file, index=False)
+          print(f"Transformed CSV saved to: {transformed_output_file}")
+          
+          # Output for Kestra
+          sys.exit(0)
+              
+      except Exception as e:
+          print(f"Error transforming schema: {e}")
+          sys.exit(1)
+    outputFiles:
+      - "transformed_output_file.csv"
+
   - id: upload_to_gcs
     type: io.kestra.plugin.gcp.gcs.Upload
-    from: "{{ outputs.extract_zip.files[render(vars.filename) ~ vars.csv_suffix ] }}"
+    from: "{{ outputs.validate_and_transform_schema.outputFiles['transformed_output_file.csv'] }}"
     to: "gs://{{kv('GCP_BUCKET_NAME')}}/{{ inputs.year }}/{{ inputs.month }}/{{render(vars.filename)}}{{vars.csv_suffix}}"
 
-  - id: purge_files
+  - id: purge_files_on_success
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files
+
+errors:
+  - id: purge_files_on_failure
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: "Cleanup files after failure"
 

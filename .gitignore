@@ -4,6 +4,9 @@ kestra-data/
 postgres-data/
 kestra-secrets/
 
+# test files
+*.csv  
+
 # Do not upload service account key to git
 *.json
 *.env_encoded

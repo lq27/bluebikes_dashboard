@@ -136,9 +136,9 @@ tasks:
           current_columns = set(df.columns)
           missing_columns = set(expected_headers) - current_columns
           
-          # Fill missing columns with defaults or "None" if not specified
+          # Fill missing columns with defaults or None if not specified
           for col in missing_columns:
-            default_value = default_values.get(col, "None")
+            default_value = default_values.get(col, None)
             df[col] = default_value
             print(f"Added missing column: {col} with default value: {default_value}")
           
@@ -172,12 +172,101 @@ tasks:
     from: "{{ outputs.validate_and_transform_schema.outputFiles['transformed_output_file.csv'] }}"
     to: "gs://{{kv('GCP_BUCKET_NAME')}}/{{ inputs.year }}/{{ inputs.month }}/{{render(vars.filename)}}{{vars.csv_suffix}}"
 
-  - id: purge_files_on_success
+  - id: load_staging_to_bigquery
+    type: io.kestra.plugin.gcp.bigquery.Load
+    destinationTable: "{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.staging_table"
+    from: "{{ outputs.validate_and_transform_schema.outputFiles['transformed_output_file.csv'] }}"
+    format: CSV
+    writeDisposition: WRITE_TRUNCATE  # overwrites existing table, if any
+    autodetect: true
+    csvOptions:
+      skipLeadingRows: 1
+
+  - id: unique_id_bq_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE OR REPLACE TABLE `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.{{ render(vars.filename) }}`
+      AS
+      SELECT
+        MD5(CONCAT(
+          COALESCE(CAST(ride_id AS STRING), ""),
+          COALESCE(CAST(started_at AS STRING), ""),
+          COALESCE(CAST(start_station_id AS STRING), ""),
+          COALESCE(CAST(end_station_id AS STRING), ""),
+          COALESCE(CAST(member_casual AS STRING), ""), 	
+          COALESCE(CAST(rideable_type AS STRING), "")
+        )) AS unique_row_id,
+        "{{ render(vars.filename) }}" AS filename,
+        *
+      FROM `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.staging_table`;
+
+  - id: all_trip_data
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      CREATE TABLE IF NOT EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.all_trip_data`
+      (
+        unique_row_id BYTES,
+        fileid STRING, 
+        ride_id	STRING,
+        rideable_type	STRING,	
+        started_at	TIMESTAMP,	
+        ended_at	TIMESTAMP,	
+        start_station_name	STRING,	
+        start_station_id	STRING,	
+        end_station_name	STRING,	
+        end_station_id	STRING,	
+        start_lat	FLOAT64,	
+        start_lng	FLOAT64,	
+        end_lat	FLOAT64,	
+        end_lng	FLOAT64,	
+        member_casual	STRING,	
+        tripduration	STRING,	
+        `birth year`	STRING,	
+        gender	STRING,	
+        bikeid	STRING
+      )
+
+  - id: merge_to_all_data
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: |
+      MERGE `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.all_trip_data` T
+      USING `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.{{ render(vars.filename) }}` S
+      ON T.unique_row_id = S.unique_row_id
+      WHEN NOT MATCHED THEN INSERT ROW
+
+  - id: success_delete_gcs_file
+    type: io.kestra.plugin.gcp.gcs.Delete
+    uri: "gs://{{kv('GCP_BUCKET_NAME')}}/{{ inputs.year }}/{{ inputs.month }}/{{render(vars.filename)}}{{vars.csv_suffix}}"
+
+  - id: success_delete_staging_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: "DROP TABLE IF EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.staging_table`"
+
+  - id: success_delete_unique_id_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: "DROP TABLE IF EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.{{ render(vars.filename) }}`"
+    
+  - id: success_purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: To avoid cluttering your storage, we will remove the downloaded files
 
 errors:
-  - id: purge_files_on_failure
+
+  - id: failed_purge_files
     type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
     description: "Cleanup files after failure"
+
+  - id: failed_delete_staging_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: "DROP TABLE IF EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.staging_table`"
+
+  - id: failed_delete_unique_id_table
+    type: io.kestra.plugin.gcp.bigquery.Query
+    sql: "DROP TABLE IF EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.{{ render(vars.filename) }}`"
+
+  - id: failed_delete_gcs_file
+    type: io.kestra.plugin.gcp.gcs.Delete
+    uri: "gs://{{kv('GCP_BUCKET_NAME')}}/{{ inputs.year }}/{{ inputs.month }}/{{render(vars.filename)}}{{vars.csv_suffix}}"
+    errorOnMissing: false
+
 

@@ -1,6 +1,8 @@
 id: bluebikes_kv
 namespace: bluebikes
 
+# you can, of course, replace the values with different ones from your project, if you named things differently. 
+
 tasks:
   - id: gcp_creds
     type: io.kestra.plugin.core.kv.Set
@@ -10,7 +12,7 @@ tasks:
       {
           PASTE JSON CONTENTS HERE
       }
-    # actual json key file is saved in .env_encoded (not in git) and accessed using SECRET in kestra
+    # actual JSON key will be included in your PRIVATE copy of this yaml file. Or you can do it via a different method, e.g. secrets. 
 
 
   - id: gcp_project_id
@@ -30,3 +32,9 @@ tasks:
     key: GCP_BUCKET_NAME
     kvType: STRING
     value: tripdata-lake
+
+  - id: gcp_bq_dataset
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_BQ_DATASET
+    kvType: STRING
+    value: tripdata

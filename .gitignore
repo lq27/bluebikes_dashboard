@@ -4,6 +4,12 @@ kestra-data/
 postgres-data/
 kestra-secrets/
 
+# terraform files
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+.terraform/
+
 # test files
 *.csv  
 

@@ -21,9 +21,6 @@ variables:
     - "end_lat"
     - "end_lng"
     - "member_casual"
-    - 'tripduration'
-    - 'birth year'
-    - 'gender'
     - 'bikeid'
 
 inputs:
@@ -142,6 +139,10 @@ tasks:
             df[col] = default_value
             print(f"Added missing column: {col} with default value: {default_value}")
           
+          # drop unwanted columns if they exist
+          columns_to_remove = ['gender', 'postal code', 'tripduration', 'birth year']
+          df = df.drop(columns=columns_to_remove, errors='ignore')
+
           # Check for any unexpected columns that remain
           final_columns = set(df.columns)
           unexpected_columns = final_columns - set(expected_headers)
@@ -196,35 +197,9 @@ tasks:
           COALESCE(CAST(member_casual AS STRING), ""), 	
           COALESCE(CAST(rideable_type AS STRING), "")
         )) AS unique_row_id,
-        "{{ render(vars.filename) }}" AS filename,
+        "{{ render(vars.filename) }}" AS fileid,
         *
       FROM `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.staging_table`;
-
-  - id: all_trip_data
-    type: io.kestra.plugin.gcp.bigquery.Query
-    sql: |
-      CREATE TABLE IF NOT EXISTS `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.all_trip_data`
-      (
-        unique_row_id BYTES,
-        fileid STRING, 
-        ride_id	STRING,
-        rideable_type	STRING,	
-        started_at	TIMESTAMP,	
-        ended_at	TIMESTAMP,	
-        start_station_name	STRING,	
-        start_station_id	STRING,	
-        end_station_name	STRING,	
-        end_station_id	STRING,	
-        start_lat	FLOAT64,	
-        start_lng	FLOAT64,	
-        end_lat	FLOAT64,	
-        end_lng	FLOAT64,	
-        member_casual	STRING,	
-        tripduration	STRING,	
-        `birth year`	STRING,	
-        gender	STRING,	
-        bikeid	STRING
-      )
 
   - id: merge_to_all_data
     type: io.kestra.plugin.gcp.bigquery.Query
@@ -232,7 +207,43 @@ tasks:
       MERGE `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.all_trip_data` T
       USING `{{kv('GCP_PROJECT_ID')}}.{{kv('GCP_BQ_DATASET')}}.{{ render(vars.filename) }}` S
       ON T.unique_row_id = S.unique_row_id
-      WHEN NOT MATCHED THEN INSERT ROW
+      WHEN NOT MATCHED THEN
+        INSERT (
+          unique_row_id,
+          fileid,
+          ride_id,
+          rideable_type,
+          started_at,
+          ended_at,
+          start_station_name,
+          start_station_id,
+          end_station_name,
+          end_station_id,
+          start_lat,
+          start_lng,
+          end_lat,
+          end_lng,
+          member_casual,
+          bikeid
+        )
+        VALUES (
+          CAST(S.unique_row_id AS BYTES),
+          CAST(S.fileid AS STRING),
+          CAST(S.ride_id AS STRING),
+          CAST(S.rideable_type AS STRING),
+          CAST(S.started_at AS TIMESTAMP),
+          CAST(S.ended_at AS TIMESTAMP),
+          CAST(S.start_station_name AS STRING),
+          CAST(S.start_station_id AS STRING),
+          CAST(S.end_station_name AS STRING),
+          CAST(S.end_station_id AS STRING),
+          CAST(S.start_lat AS FLOAT64),
+          CAST(S.start_lng AS FLOAT64),
+          CAST(S.end_lat AS FLOAT64),
+          CAST(S.end_lng AS FLOAT64),
+          CAST(S.member_casual AS STRING),
+          CAST(S.bikeid AS STRING)
+      )
 
   - id: success_delete_gcs_file
     type: io.kestra.plugin.gcp.gcs.Delete

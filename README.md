@@ -1,5 +1,6 @@
 # bluebikes_dashboard
 A dashboard for BlueBikes ride data. 
+https://lookerstudio.google.com/reporting/c24a4d8d-e304-447a-9f6c-e8abd83e2cad
 
 ### Background & Motivation: 
 Bluebikes is a a bikesharing platform serving the Boston metro area, serving XXX riders each XXX. 
@@ -14,12 +15,12 @@ TODO insert link to data here.
 - Data is available from 2015-Present
 - The data columns vary over time, but the key data points provided for each ride include:
     - Ride ID
+    - Bicycle type (electric or regular)
     - Start and End station
     - Start and End latitude
     - Start and end date/time
     - Membership type (whether member or casual user)
-    - Bicycle type (electric or regular)
- 
+  
 ### Data pipeline overview 
 
 - The Bluebikes data lives in AWS S3 storage.
@@ -30,6 +31,24 @@ TODO insert link to data here.
 - Python is used during the data cleaning step in Kestra for data standardization
 - Finally, Looker Studio is used for data visualizations 
 
+### The expected schema
+
+unique_row_id: a unique hash code for the row data (generated during ingestion) - BYTES
+fileid: the name of the source csv file for the row data (added during ingestion) - STRING
+ride_id: ride identifier, comes from source csv data - STRING
+rideable_type: whether electric or classic bike - STRING
+started_at: when the ride started - TIMESTAMP
+ended_at: when the ride ended - TIMESTAMP
+start_station_name: where the ride started - STRING
+start_station_id: ID number of the station where the ride started - STRING
+end_station_name: where the ride ended - STRING
+end_station_id: ID number of the station where the ride ended - STRING
+start_lat: latitude of start station - FLOAT
+start_lng: longitude of start station - FLOAT
+end_lat: latitude of end station - FLOAT
+end_lng: longitude of end station - FLOAT
+member_casual: whether rider was a blubikes member or a casual user - STRING
+bikeid: ID of the bike used - STRING
 
 
    

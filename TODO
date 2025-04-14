@@ -1,9 +1,0 @@
--- Todo list for Bluebikes project
-
-[ ] Make Kestra flow for setting up resources
-[ ] Make Kestra flow for taking down resources
-[ ] Make Kestra flow for removing table data
-[ ] Make docker compose for the project resources
-[ ] TODO Use terraform to automate the GCP setup tasks
-[ ] Use airflow as orchestrator 
-[ ] Use AWS as cloud platform 

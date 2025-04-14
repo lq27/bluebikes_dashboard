@@ -1,0 +1,20 @@
+id: bluebikes_purge_logs_execs
+namespace: bluebikes
+description: |
+  This flow will remove all executions and logs older than 1 month.
+  We recommend running this flow daily to avoid running out of disk space.
+
+tasks:
+  - id: purge_executions
+    type: io.kestra.plugin.core.execution.PurgeExecutions
+    endDate: "{{ now() | dateAdd(-1, 'MONTHS') }}"
+    purgeLog: false
+
+  - id: purge_logs
+    type: io.kestra.plugin.core.log.PurgeLogs
+    endDate: "{{ now() | dateAdd(-1, 'MONTHS') }}"
+
+triggers:
+  - id: daily
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "@daily"

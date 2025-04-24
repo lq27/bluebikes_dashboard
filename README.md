@@ -150,22 +150,22 @@ In the future, I will look into a different visualization platform because Looke
 
 This is the expected schema for our final all_trip_data table, and the inline python code in kestra transforms and validates the data so that it fits these specifications before loading into BQ. 
 
-unique_row_id: a unique hash code for the row data (generated during ingestion) - BYTES
-fileid: the name of the source csv file for the row data (added during ingestion) - STRING
-ride_id: ride identifier, comes from source csv data - STRING
-rideable_type: whether electric or classic bike - STRING
-started_at: when the ride started - TIMESTAMP
-ended_at: when the ride ended - TIMESTAMP
-start_station_name: where the ride started - STRING
-start_station_id: ID number of the station where the ride started - STRING
-end_station_name: where the ride ended - STRING
-end_station_id: ID number of the station where the ride ended - STRING
-start_lat: latitude of start station - FLOAT
-start_lng: longitude of start station - FLOAT
-end_lat: latitude of end station - FLOAT
-end_lng: longitude of end station - FLOAT
-member_casual: whether rider was a blubikes member or a casual user - STRING
-bikeid: ID of the bike used - STRING
+- unique_row_id: a unique hash code for the row data (generated during ingestion) - BYTES
+- fileid: the name of the source csv file for the row data (added during ingestion) - STRING
+- ride_id: ride identifier, comes from source csv data - STRING
+- rideable_type: whether electric or classic bike - STRING
+- started_at: when the ride started - TIMESTAMP
+- ended_at: when the ride ended - TIMESTAMP
+- start_station_name: where the ride started - STRING
+- start_station_id: ID number of the station where the ride started - STRING
+- end_station_name: where the ride ended - STRING
+- end_station_id: ID number of the station where the ride ended - STRING
+- start_lat: latitude of start station - FLOAT
+- start_lng: longitude of start station - FLOAT
+- end_lat: latitude of end station - FLOAT
+- end_lng: longitude of end station - FLOAT
+- member_casual: whether rider was a blubikes member or a casual user - STRING
+-  bikeid: ID of the bike used - STRING
 
 ## Thanks and contact 
 That's it! Feel free to reach out on git with any questions or ideas about how to improve or extend this project. Thanks for reading, and be safe on your bikes out there :)
